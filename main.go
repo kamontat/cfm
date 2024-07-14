@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/exec"
+	"runtime"
+	"syscall"
 )
 
 func main() {
@@ -14,9 +18,18 @@ func main() {
 	nextHop := flag.String("nexthop", "http://localhost:8080", "URL of the next hop (target) server")
 	listenAddr := flag.String("listen", ":8000", "Address to listen on")
 	logRequests := flag.Bool("log", false, "Enable request logging")
+	daemonize := flag.Bool("daemon", false, "Run as a daemon")
 
 	// Parse the flags
 	flag.Parse()
+
+	// Handle daemonization
+	if *daemonize {
+		if !runningAsDaemon() {
+			daemonizeProcess()
+			return
+		}
+	}
 
 	// Parse the next hop URL
 	target, err := url.Parse(*nextHop)
@@ -50,4 +63,35 @@ type loggingRoundTripper struct {
 func (l *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	log.Printf("Proxying request: %s %s", req.Method, req.URL)
 	return l.wrapped.RoundTrip(req)
+}
+
+// runningAsDaemon checks if the current process is running as a daemon
+func runningAsDaemon() bool {
+	return os.Getenv("FORKED") == "1"
+}
+
+// daemonizeProcess starts a new process as a daemon
+func daemonizeProcess() {
+	executable, err := os.Executable()
+	if err != nil {
+		log.Fatalf("Failed to get executable path: %v", err)
+	}
+
+	cmd := exec.Command(executable, os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "FORKED=1")
+
+	if runtime.GOOS != "windows" {
+		// For Unix-like systems, detach the process
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setsid: true,
+		}
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		log.Fatalf("Failed to start daemon: %v", err)
+	}
+
+	fmt.Println("Daemon started successfully.")
+	os.Exit(0)
 }
