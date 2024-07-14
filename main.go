@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"runtime"
-	"syscall"
 )
 
 func main() {
@@ -79,13 +77,6 @@ func daemonizeProcess() {
 
 	cmd := exec.Command(executable, os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "FORKED=1")
-
-	if runtime.GOOS != "windows" {
-		// For Unix-like systems, detach the process
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setsid: true,
-		}
-	}
 
 	err = cmd.Start()
 	if err != nil {
