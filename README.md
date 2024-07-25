@@ -18,11 +18,11 @@ This project implements a simple yet flexible reverse proxy server using Go's `h
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/reverse-proxy-golang.git
+   git clone https://github.com/presbrey/shrp.git
    ```
 2. Navigate to the project directory:
    ```
-   cd reverse-proxy-golang
+   cd shrp
    ```
 
 ## Usage
@@ -35,10 +35,12 @@ go run main.go [flags]
 
 ### Available Flags
 
-- `-nexthop`: URL of the next hop (target) server (default: "http://localhost:8080")
+- `-host`: Value of the Host header to send to the next hop server
+- `-nexthop`: URL of the next hop (target) server (default: "https://httpbin.org/")
 - `-listen`: Address to listen on (default: ":8000")
 - `-log`: Enable request logging (default: false)
 - `-daemon`: Run as a daemon (default: false)
+- `-insecure`: Ignore SSL certificate errors (default: false)
 
 ### Examples
 
