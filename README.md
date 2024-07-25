@@ -1,11 +1,15 @@
 # Golang Reverse Proxy Server
 
-This project implements a simple yet flexible reverse proxy server using Go's `httputil.ReverseProxy`. It's designed to forward incoming HTTP requests to a specified target server, making it useful for various scenarios such as load balancing, API gateway implementations, or adding a layer of abstraction between clients and backend services.
+This project implements a simple yet flexible reverse proxy server using Go's `httputil.ReverseProxy`. It's designed to forward incoming HTTP requests to a specified target server, adding a layer of abstraction between clients and backend services for a variety of use-cases.
+
+It can be used for testing, debugging, or as a building block for more complex systems. Customizing the proxy is straightforward, and the codebase is easy to understand and extend. Instead of using nginx, Apache, or other full-fledged reverse proxy servers, this lightweight Go program provides a quick and easy way to set up a reverse proxy with minimal configuration.
 
 ## Features
 
 - Configurable next hop (target) server
 - Customizable listen address
+- Support for custom Host header
+- SSL certificate validation control
 - Optional request logging
 - Command-line flags for easy configuration
 - Cross-platform daemonization support (Windows, Linux, macOS)
@@ -35,19 +39,13 @@ go run main.go [flags]
 
 ### Use Cases
 
-1. **Testing DNS Migrations**: When migrating services between different DNS providers or IP addresses, this reverse proxy can be used to verify the new configuration before making the final switch. By setting up the proxy to forward requests to the new IP or DNS, you can test the new setup without changing the actual DNS records.
+**Testing DNS Migrations**: When migrating services between different DNS providers or IP addresses, this reverse proxy can be used to verify the new configuration before making the final switch. By setting up the proxy to forward requests to the new IP or DNS, you can test the new setup without changing the actual DNS records.
 
    Example:
    ```
    go run main.go -nexthop https://new-ip-or-dns.com -host original-domain.com
    ```
    This allows you to send requests to the proxy (which will appear to come from `original-domain.com`) and have them forwarded to the new IP or DNS, simulating the post-migration behavior.
-
-2. **Load Balancing**: Although not a full-featured load balancer, this proxy can be used for simple round-robin load balancing by running multiple instances with different `-nexthop` targets.
-
-3. **API Gateway**: Act as a simple API gateway, potentially adding authentication or request modification before forwarding to backend services.
-
-4. **SSL Termination**: By running the proxy with SSL and forwarding to non-SSL backends, you can offload SSL processing.
 
 ### Available Flags
 
