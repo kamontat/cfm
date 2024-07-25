@@ -61,13 +61,18 @@ func main() {
 
 	// Optionally ignore SSL certificate errors
 	if *insecureSSL {
-		if proxy.Transport == nil {
-			proxy.Transport = http.DefaultTransport
+		switch p := proxy.Transport.(type) {
+		case *http.Transport:
+			if p.TLSClientConfig == nil {
+				p.TLSClientConfig = &tls.Config{}
+			}
+			p.TLSClientConfig.InsecureSkipVerify = true
+		case *loggingRoundTripper:
+			if p.wrapped.(*http.Transport).TLSClientConfig == nil {
+				p.wrapped.(*http.Transport).TLSClientConfig = &tls.Config{}
+			}
+			p.wrapped.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
 		}
-		if proxy.Transport.(*http.Transport).TLSClientConfig == nil {
-			proxy.Transport.(*http.Transport).TLSClientConfig = &tls.Config{}
-		}
-		proxy.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	// Create a handler that will be used to serve all requests

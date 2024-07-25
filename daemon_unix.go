@@ -1,8 +1,12 @@
+//go:build !windows
 // +build !windows
 
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"syscall"
 )
