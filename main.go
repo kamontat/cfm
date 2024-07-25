@@ -9,7 +9,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 )
 
 var (
@@ -98,23 +97,4 @@ func (l *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 // runningAsDaemon checks if the current process is running as a daemon
 func runningAsDaemon() bool {
 	return os.Getenv("FORKED") == "1"
-}
-
-// daemonizeProcess starts a new process as a daemon
-func daemonizeProcess() {
-	executable, err := os.Executable()
-	if err != nil {
-		log.Fatalf("Failed to get executable path: %v", err)
-	}
-
-	cmd := exec.Command(executable, os.Args[1:]...)
-	cmd.Env = append(os.Environ(), "FORKED=1")
-
-	err = cmd.Start()
-	if err != nil {
-		log.Fatalf("Failed to start daemon: %v", err)
-	}
-
-	fmt.Println("Daemon started successfully.")
-	os.Exit(0)
 }
