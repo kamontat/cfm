@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
@@ -11,16 +12,22 @@ import (
 	"os/exec"
 )
 
-func main() {
+var (
 	// Define command-line flags
-	nextHop := flag.String("nexthop", "http://localhost:8080", "URL of the next hop (target) server")
-	listenAddr := flag.String("listen", ":8000", "Address to listen on")
-	logRequests := flag.Bool("log", false, "Enable request logging")
-	daemonize := flag.Bool("daemon", false, "Run as a daemon")
+	hostHeader  = flag.String("host", "", "Value of the Host header to send to the next hop server")
+	nextHop     = flag.String("nexthop", "https://httpbin.org/", "URL of the next hop (target) server")
+	listenAddr  = flag.String("listen", ":8000", "Address to listen on")
+	logRequests = flag.Bool("log", false, "Enable request logging")
+	daemonize   = flag.Bool("daemon", false, "Run as a daemon")
+	insecureSSL = flag.Bool("insecure", false, "Ignore SSL certificate errors")
+)
 
+func init() {
 	// Parse the flags
 	flag.Parse()
+}
 
+func main() {
 	// Handle daemonization
 	if *daemonize {
 		if !runningAsDaemon() {
@@ -38,9 +45,29 @@ func main() {
 	// Create a reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
+	// Optionally set the Host header
+	if *hostHeader != "" {
+		proxy.Director = func(req *http.Request) {
+			req.Host = *hostHeader
+			req.URL.Host = *hostHeader
+			req.URL.Scheme = target.Scheme
+		}
+	}
+
 	// Optionally add request logging
 	if *logRequests {
 		proxy.Transport = &loggingRoundTripper{http.DefaultTransport}
+	}
+
+	// Optionally ignore SSL certificate errors
+	if *insecureSSL {
+		if proxy.Transport == nil {
+			proxy.Transport = http.DefaultTransport
+		}
+		if proxy.Transport.(*http.Transport).TLSClientConfig == nil {
+			proxy.Transport.(*http.Transport).TLSClientConfig = &tls.Config{}
+		}
+		proxy.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	// Create a handler that will be used to serve all requests
