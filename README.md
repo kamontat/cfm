@@ -33,6 +33,22 @@ To run the reverse proxy server, use the following command:
 go run main.go [flags]
 ```
 
+### Use Cases
+
+1. **Testing DNS Migrations**: When migrating services between different DNS providers or IP addresses, this reverse proxy can be used to verify the new configuration before making the final switch. By setting up the proxy to forward requests to the new IP or DNS, you can test the new setup without changing the actual DNS records.
+
+   Example:
+   ```
+   go run main.go -nexthop https://new-ip-or-dns.com -host original-domain.com
+   ```
+   This allows you to send requests to the proxy (which will appear to come from `original-domain.com`) and have them forwarded to the new IP or DNS, simulating the post-migration behavior.
+
+2. **Load Balancing**: Although not a full-featured load balancer, this proxy can be used for simple round-robin load balancing by running multiple instances with different `-nexthop` targets.
+
+3. **API Gateway**: Act as a simple API gateway, potentially adding authentication or request modification before forwarding to backend services.
+
+4. **SSL Termination**: By running the proxy with SSL and forwarding to non-SSL backends, you can offload SSL processing.
+
 ### Available Flags
 
 - `-host`: Value of the Host header to send to the next hop server
