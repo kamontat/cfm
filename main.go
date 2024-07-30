@@ -17,18 +17,22 @@ var (
 	nextHop     = flag.String("nexthop", "https://httpbin.org/", "URL of the next hop (target) server")
 	listenAddr  = flag.String("listen", ":8000", "Address to listen on")
 	logRequests = flag.Bool("log", false, "Enable request logging")
-	daemonize   = flag.Bool("daemon", false, "Run as a daemon")
+	flagDaemon  = flag.Bool("daemon", false, "Run as a daemon")
+	flagDebug   = flag.Bool("debug", false, "Enable debug mode")
 	insecureSSL = flag.Bool("insecure", false, "Ignore SSL certificate errors")
 )
 
 func init() {
 	// Parse the flags
 	flag.Parse()
+	if *flagDebug {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
 }
 
 func main() {
 	// Handle daemonization
-	if *daemonize {
+	if *flagDaemon {
 		if !runningAsDaemon() {
 			daemonizeProcess()
 			return
@@ -58,27 +62,50 @@ func main() {
 		proxy.Transport = &loggingRoundTripper{http.DefaultTransport}
 	}
 
-	// Optionally ignore SSL certificate errors
-	if *insecureSSL {
-		switch t := http.DefaultTransport.(type) {
-		case *http.Transport:
+	switch t := http.DefaultTransport.(type) {
+	case *http.Transport:
+		// Optionally ignore SSL certificate errors
+		if *insecureSSL {
 			if t.TLSClientConfig == nil {
-				t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-			} else {
-				t.TLSClientConfig.InsecureSkipVerify = true
+				t.TLSClientConfig = &tls.Config{}
 			}
+			t.TLSClientConfig.InsecureSkipVerify = true
 		}
-		switch p := proxy.Transport.(type) {
-		case *http.Transport:
+		if *hostHeader != "" {
+			t.TLSClientConfig.ServerName = *hostHeader
+		}
+		if *flagDebug {
+			log.Printf("%+v", t.TLSClientConfig)
+		}
+	}
+	switch p := proxy.Transport.(type) {
+	case *http.Transport:
+		// Optionally ignore SSL certificate errors
+		if *insecureSSL {
 			if p.TLSClientConfig == nil {
 				p.TLSClientConfig = &tls.Config{}
 			}
 			p.TLSClientConfig.InsecureSkipVerify = true
-		case *loggingRoundTripper:
+		}
+		if *hostHeader != "" {
+			p.TLSClientConfig.ServerName = *hostHeader
+		}
+		if *flagDebug {
+			log.Printf("%+v", p.TLSClientConfig)
+		}
+	case *loggingRoundTripper:
+		// Optionally ignore SSL certificate errors
+		if *insecureSSL {
 			if p.wrapped.(*http.Transport).TLSClientConfig == nil {
 				p.wrapped.(*http.Transport).TLSClientConfig = &tls.Config{}
 			}
 			p.wrapped.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
+		}
+		if *hostHeader != "" {
+			p.wrapped.(*http.Transport).TLSClientConfig.ServerName = *hostHeader
+		}
+		if *flagDebug {
+			log.Printf("%+v", p.wrapped.(*http.Transport).TLSClientConfig)
 		}
 	}
 
