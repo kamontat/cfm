@@ -48,7 +48,7 @@ func main() {
 	if *hostHeader != "" {
 		proxy.Director = func(req *http.Request) {
 			req.Host = *hostHeader
-			req.URL.Host = *hostHeader
+			req.URL.Host = target.Host
 			req.URL.Scheme = target.Scheme
 		}
 	}
@@ -60,6 +60,14 @@ func main() {
 
 	// Optionally ignore SSL certificate errors
 	if *insecureSSL {
+		switch t := http.DefaultTransport.(type) {
+		case *http.Transport:
+			if t.TLSClientConfig == nil {
+				t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+			} else {
+				t.TLSClientConfig.InsecureSkipVerify = true
+			}
+		}
 		switch p := proxy.Transport.(type) {
 		case *http.Transport:
 			if p.TLSClientConfig == nil {
