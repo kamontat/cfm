@@ -1,25 +1,27 @@
 package main
 
 import (
-	"crypto/tls"
+	"context"
 	"flag"
-	"fmt"
 	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
+)
+
+const (
+	DEFAULT_ENV_NAME = "<default>"
 )
 
 var (
-	// Define command-line flags
-	hostHeader  = flag.String("host", "", "Value of the Host header to send to the next hop server")
-	nextHop     = flag.String("nexthop", "https://httpbin.org/", "URL of the next hop (target) server")
-	listenAddr  = flag.String("listen", ":8000", "Address to listen on")
-	logRequests = flag.Bool("log", false, "Enable request logging")
-	flagDaemon  = flag.Bool("daemon", false, "Run as a daemon")
-	flagDebug   = flag.Bool("debug", false, "Enable debug mode")
-	insecureSSL = flag.Bool("insecure", false, "Ignore SSL certificate errors")
+	hostname     = flag.String("host", "", "Value of the Host header to send to the next hop server")
+	port         = flag.Int("port", 8000, "Listen port number for default environment")
+	envEnable    = flag.Bool("env", false, "Enabled proxy to cloudflare per environment")
+	devEnable    = flag.Bool("dev", true, "Enabled proxy to cloudflare development environment")
+	devPort      = flag.Int("dev-port", 8001, "Listen port number for development")
+	stgEnable    = flag.Bool("stg", true, "Enabled proxy to cloudflare staging environment")
+	stgPort      = flag.Int("stg-port", 8002, "Listen port number for staging")
+	prdEnable    = flag.Bool("prd", true, "Enabled proxy to cloudflare production environment")
+	prdPort      = flag.Int("prd-port", 8003, "Listen port number for production")
+	flagDebug    = flag.Bool("debug", false, "Enable debug mode")
+	flagInsecure = flag.Bool("insecure", false, "Ignore SSL certificate errors")
 )
 
 func init() {
@@ -31,105 +33,61 @@ func init() {
 }
 
 func main() {
-	// Handle daemonization
-	if *flagDaemon {
-		if !runningAsDaemon() {
-			daemonizeProcess()
-			return
-		}
-	}
+	var ctx, cancel = context.WithCancel(context.Background())
+	var target = BuildCloudflareCDN(*hostname)
 
-	// Parse the next hop URL
-	target, err := url.Parse(*nextHop)
-	if err != nil {
-		log.Fatalf("Invalid next hop URL: %v", err)
-	}
-
-	// Create a reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
-	// Optionally set the Host header
-	if *hostHeader != "" {
-		proxy.Director = func(req *http.Request) {
-			req.Host = *hostHeader
-			req.URL.Host = target.Host
-			req.URL.Scheme = target.Scheme
-		}
-	}
-
-	// Optionally add request logging
-	if *logRequests {
-		proxy.Transport = &loggingRoundTripper{http.DefaultTransport}
-	}
-
-	switch t := http.DefaultTransport.(type) {
-	case *http.Transport:
-		// Optionally ignore SSL certificate errors
-		if *insecureSSL {
-			if t.TLSClientConfig == nil {
-				t.TLSClientConfig = &tls.Config{}
-			}
-			t.TLSClientConfig.InsecureSkipVerify = true
-		}
-		if *hostHeader != "" {
-			t.TLSClientConfig.ServerName = *hostHeader
-		}
-		if *flagDebug {
-			log.Printf("%+v", t.TLSClientConfig)
-		}
-	}
-	switch p := proxy.Transport.(type) {
-	case *http.Transport:
-		// Optionally ignore SSL certificate errors
-		if *insecureSSL {
-			if p.TLSClientConfig == nil {
-				p.TLSClientConfig = &tls.Config{}
-			}
-			p.TLSClientConfig.InsecureSkipVerify = true
-		}
-		if *hostHeader != "" {
-			p.TLSClientConfig.ServerName = *hostHeader
-		}
-		if *flagDebug {
-			log.Printf("%+v", p.TLSClientConfig)
-		}
-	case *loggingRoundTripper:
-		// Optionally ignore SSL certificate errors
-		if *insecureSSL {
-			if p.wrapped.(*http.Transport).TLSClientConfig == nil {
-				p.wrapped.(*http.Transport).TLSClientConfig = &tls.Config{}
-			}
-			p.wrapped.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
-		}
-		if *hostHeader != "" {
-			p.wrapped.(*http.Transport).TLSClientConfig.ServerName = *hostHeader
-		}
-		if *flagDebug {
-			log.Printf("%+v", p.wrapped.(*http.Transport).TLSClientConfig)
-		}
-	}
-
-	// Create a handler that will be used to serve all requests
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
+	var proxy = NewReverseProxy(&ReverseProxySetting{
+		Enabled:     !*envEnable,
+		Environment: DEFAULT_ENV_NAME,
+		ListenHost:  "localhost",
+		ListenPort:  *port,
+		Target:      target,
+		Hostname:    *hostname,
+		IsDebug:     *flagDebug,
+		IsInsecure:  *flagInsecure,
 	})
 
-	// Start the server
-	fmt.Printf("Starting reverse proxy server on %s, forwarding to %s\n", *listenAddr, *nextHop)
-	log.Fatal(http.ListenAndServe(*listenAddr, handler))
-}
+	var devProxy = NewReverseProxy(&ReverseProxySetting{
+		Enabled:     *envEnable && *devEnable,
+		Environment: "development",
+		ListenHost:  "localhost",
+		ListenPort:  *devPort,
+		Target:      target,
+		Hostname:    *hostname,
+		IsDebug:     *flagDebug,
+		IsInsecure:  *flagInsecure,
+	})
 
-// loggingRoundTripper is a custom RoundTripper that logs requests
-type loggingRoundTripper struct {
-	wrapped http.RoundTripper
-}
+	var stgProxy = NewReverseProxy(&ReverseProxySetting{
+		Enabled:     *envEnable && *stgEnable,
+		Environment: "staging",
+		ListenHost:  "localhost",
+		ListenPort:  *stgPort,
+		Target:      target,
+		Hostname:    *hostname,
+		IsDebug:     *flagDebug,
+		IsInsecure:  *flagInsecure,
+	})
 
-func (l *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	log.Printf("Proxying request: %s %s", req.Method, req.URL)
-	return l.wrapped.RoundTrip(req)
-}
+	var prdProxy = NewReverseProxy(&ReverseProxySetting{
+		Enabled:     *envEnable && *prdEnable,
+		Environment: "production",
+		ListenHost:  "localhost",
+		ListenPort:  *prdPort,
+		Target:      target,
+		Hostname:    *hostname,
+		IsDebug:     *flagDebug,
+		IsInsecure:  *flagInsecure,
+	})
 
-// runningAsDaemon checks if the current process is running as a daemon
-func runningAsDaemon() bool {
-	return os.Getenv("FORKED") == "1"
+	go proxy.Start(ctx, cancel)
+	go devProxy.Start(ctx, cancel)
+	go stgProxy.Start(ctx, cancel)
+	go prdProxy.Start(ctx, cancel)
+
+	if *envEnable && !*devEnable && !*stgEnable && !*prdEnable {
+		cancel()
+	}
+
+	<-ctx.Done()
 }
